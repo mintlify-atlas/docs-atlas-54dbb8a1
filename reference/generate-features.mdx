@@ -1,0 +1,77 @@
+---
+title: "generate_features"
+description: "Feature engineering for ML model"
+---
+
+## Module path
+
+```
+Data.generate_features
+```
+
+---
+
+## `generate_features_teamwins()`
+
+Reads raw game data from the `games` table, computes rolling averages and derived features for each team, and writes the result to the `team_game_stats` table. This table is consumed directly by the ML training step.
+
+### Signature
+
+```python
+def generate_features_teamwins(rolling_window: int = 5):
+```
+
+### Parameters
+
+<ParamField path="rolling_window" type="integer" default="5">
+  Number of prior games used to compute each rolling average. A `min_periods=1` setting means rows are included even when fewer than `rolling_window` games exist for a team.
+</ParamField>
+
+**Returns:** `None`
+
+**Side effects:**
+- Reads all rows from the `games` table in `Data/nba_stats.db`.
+- Drops and recreates the `team_game_stats` table (via `if_exists='replace'`).
+- Prints the loaded row count and the generated row count to stdout.
+
+<Note>
+  Run `fetch_games_teamwins()` before this function so the `games` table is populated.
+</Note>
+
+### Usage example
+
+```python
+from Data.generate_features import generate_features_teamwins
+
+# Use the default 5-game rolling window
+generate_features_teamwins()
+
+# Use a 10-game rolling window
+generate_features_teamwins(rolling_window=10)
+```
+
+---
+
+## `team_game_stats` output columns
+
+The function creates or replaces the `team_game_stats` table with the following columns:
+
+| Column                  | Type      | Description                                                                         |
+| ----------------------- | --------- | ----------------------------------------------------------------------------------- |
+| `game_id`               | `TEXT`    | NBA game identifier. Primary key.                                                   |
+| `team`                  | `TEXT`    | Team abbreviation.                                                                  |
+| `opponent`              | `TEXT`    | Opponent team abbreviation.                                                         |
+| `points_diff`           | `REAL`    | `team_points_roll - opponent_points_roll`. Positive values favour the team.         |
+| `elo_diff`              | `REAL`    | Elo rating difference. Currently always `0` (reserved for future use).             |
+| `home`                  | `INTEGER` | `1` if the team played at home, `0` if away.                                        |
+| `win`                   | `INTEGER` | `1` if the team won, `0` if the team lost.                                          |
+| `team_points_roll`      | `REAL`    | Rolling average of `team_points` over the last N games for this team.              |
+| `opponent_points_roll`  | `REAL`    | Rolling average of `opponent_points` over the last N games for this team.          |
+| `team_reb_roll`         | `REAL`    | Rolling average of `team_reb` over the last N games for this team.                 |
+| `opponent_reb_roll`     | `REAL`    | Rolling average of `opponent_reb` over the last N games for this team.             |
+| `team_ast_roll`         | `REAL`    | Rolling average of `team_ast` over the last N games for this team.                 |
+| `opponent_ast_roll`     | `REAL`    | Rolling average of `opponent_ast` over the last N games for this team.             |
+
+<Info>
+  Rolling averages are computed per team using `groupby('team')` before being joined back to the full DataFrame. Game ordering follows the natural order of rows in the `games` table.
+</Info>

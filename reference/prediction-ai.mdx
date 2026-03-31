@@ -1,0 +1,149 @@
+---
+title: "prediction_ai"
+description: "Core ML functions for training and inference"
+---
+
+## Module path
+
+```
+prediction_ai
+```
+
+## File paths
+
+| Constant     | Path                     |
+| ------------ | ------------------------ |
+| `DBPATH`     | `Data/nba_stats.db`      |
+| `MODELPATH`  | `models/nba_model.pkl`   |
+
+---
+
+## `train_model_teamwins()`
+
+Trains a `RandomForestClassifier` on the `team_game_stats` table and saves the model to disk.
+
+**Returns:** `None`
+
+**Side effects:**
+- Prints test accuracy to stdout.
+- Creates `models/` directory if it does not exist.
+- Writes the trained model to `models/nba_model.pkl` (overwrites any existing file).
+
+<Note>
+  You must run `generate_features_teamwins()` before calling this function so the `team_game_stats` table exists and is populated.
+</Note>
+
+### Source
+
+```python prediction_ai.py
+def train_model_teamwins():
+    #database connection and data loading
+    
+    conn = sqlite3.connect(DBPATH)
+    df = pd.read_sql("SELECT * FROM team_game_stats", conn)
+    conn.close()
+
+    X = df[['points_diff', 'team_reb_roll', 'opponent_reb_roll', 'team_ast_roll', 'opponent_ast_roll', 'home']]
+    y = df['win']
+
+    #split and training
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.3, random_state=42
+    )
+
+    model = RandomForestClassifier(n_estimators=200, random_state=0)
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+
+    print("Test Accuracy:", metrics.accuracy_score(y_test, preds))
+
+    os.makedirs(os.path.dirname(MODELPATH), exist_ok=True)
+    pickle.dump(model, open(MODELPATH, "wb"))
+```
+
+---
+
+## `predict_game_teamwins()`
+
+Loads the saved model and returns the predicted win probability for a single game.
+
+### Parameters
+
+<ParamField path="points_diff" type="float" required>
+  Difference between the team's rolling average points and the opponent's rolling average points.
+</ParamField>
+
+<ParamField path="team_reb_roll" type="float" required>
+  Team's rolling average rebounds over the last N games.
+</ParamField>
+
+<ParamField path="opponent_reb_roll" type="float" required>
+  Opponent's rolling average rebounds over the last N games.
+</ParamField>
+
+<ParamField path="team_ast_roll" type="float" required>
+  Team's rolling average assists over the last N games.
+</ParamField>
+
+<ParamField path="opponent_ast_roll" type="float" required>
+  Opponent's rolling average assists over the last N games.
+</ParamField>
+
+<ParamField path="home" type="integer" required>
+  `1` if the team is playing at home, `0` if away.
+</ParamField>
+
+**Returns:** `float` — predicted probability that the team wins, in the range `[0.0, 1.0]`.
+
+<Info>
+  `models/nba_model.pkl` must exist before calling this function. Run `train_model_teamwins()` to generate it.
+</Info>
+
+### Source
+
+```python prediction_ai.py
+def predict_game_teamwins(points_diff, team_reb_roll, opponent_reb_roll, team_ast_roll, opponent_ast_roll, home):
+    model = pickle.load(open(MODELPATH, "rb"))
+    features = pd.DataFrame([{
+        "points_diff": points_diff,
+        "team_reb_roll": team_reb_roll,
+        "opponent_reb_roll": opponent_reb_roll,
+        "team_ast_roll": team_ast_roll,
+        "opponent_ast_roll": opponent_ast_roll,
+        "home": home
+    }])
+
+    prob = model.predict_proba(features)[0][1]
+    return prob
+```
+
+---
+
+## `evaluate_bet_teamwins()`
+
+Converts a win probability into a human-readable betting recommendation.
+
+### Parameters
+
+<ParamField path="probability" type="float" required>
+  Win probability returned by `predict_game_teamwins()`. Expected range: `[0.0, 1.0]`.
+</ParamField>
+
+**Returns:** `str` — one of the following labels:
+
+| Probability range | Return value   |
+| ----------------- | -------------- |
+| `> 0.60`          | `"Good Bet"`   |
+| `> 0.52`          | `"Slight Edge"` |
+| `≤ 0.52`          | `"Avoid"`      |
+
+### Source
+
+```python prediction_ai.py
+def evaluate_bet_teamwins(probability):
+    if probability > 0.60:
+        return "Good Bet"
+    elif probability > 0.52:
+        return "Slight Edge"
+    return "Avoid"
+```

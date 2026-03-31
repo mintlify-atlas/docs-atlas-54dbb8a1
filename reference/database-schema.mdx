@@ -1,0 +1,181 @@
+---
+title: "Database Schema"
+description: "SQLite tables used by Sports Predictor"
+---
+
+## Database file
+
+```
+Data/nba_stats.db
+```
+
+The database is created automatically when `fetch_games_teamwins()` runs for the first time. It contains two tables: `games` (raw ingested data) and `team_game_stats` (engineered features for ML).
+
+---
+
+## `games` table
+
+Stores one row per team per game. Each NBA game produces two rows — one for each team.
+
+Populated by [`fetch_games_teamwins()`](/reference/fetch-games).
+
+### CREATE TABLE statement
+
+```sql
+CREATE TABLE IF NOT EXISTS games (
+    game_id          TEXT,
+    game_date        TEXT,
+    team_id          INTEGER,
+    team             TEXT,
+    opponent         TEXT,
+    team_points      INTEGER,
+    opponent_points  INTEGER,
+    team_reb         INTEGER,
+    opponent_reb     INTEGER,
+    team_ast         INTEGER,
+    opponent_ast     INTEGER,
+    home             INTEGER,
+    win              INTEGER,
+    PRIMARY KEY (game_id, team_id)
+);
+```
+
+### Columns
+
+<ResponseField name="game_id" type="TEXT">
+  Unique NBA game identifier. Combined with `team_id` to form the primary key.
+</ResponseField>
+
+<ResponseField name="game_date" type="TEXT">
+  Date of the game as returned by the NBA API.
+</ResponseField>
+
+<ResponseField name="team_id" type="INTEGER">
+  Numeric NBA team identifier. Combined with `game_id` to form the primary key.
+</ResponseField>
+
+<ResponseField name="team" type="TEXT">
+  Team abbreviation (e.g., `"LAL"`, `"BOS"`).
+</ResponseField>
+
+<ResponseField name="opponent" type="TEXT">
+  Opponent team abbreviation.
+</ResponseField>
+
+<ResponseField name="team_points" type="INTEGER">
+  Points scored by the team in this game.
+</ResponseField>
+
+<ResponseField name="opponent_points" type="INTEGER">
+  Points scored by the opponent in this game.
+</ResponseField>
+
+<ResponseField name="team_reb" type="INTEGER">
+  Total rebounds for the team.
+</ResponseField>
+
+<ResponseField name="opponent_reb" type="INTEGER">
+  Total rebounds for the opponent.
+</ResponseField>
+
+<ResponseField name="team_ast" type="INTEGER">
+  Total assists for the team.
+</ResponseField>
+
+<ResponseField name="opponent_ast" type="INTEGER">
+  Total assists for the opponent.
+</ResponseField>
+
+<ResponseField name="home" type="INTEGER">
+  `1` if the team played at home; `0` if away. Derived from the `MATCHUP` field (`"vs."` = home, `"@"` = away).
+</ResponseField>
+
+<ResponseField name="win" type="INTEGER">
+  `1` if the team won; `0` if the team lost.
+</ResponseField>
+
+---
+
+## `team_game_stats` table
+
+Stores engineered features computed from the `games` table. This table is the direct input to the ML training step.
+
+Populated by [`generate_features_teamwins()`](/reference/generate-features). The table is fully replaced each time that function runs.
+
+### CREATE TABLE statement
+
+```sql
+CREATE TABLE IF NOT EXISTS team_game_stats (
+    game_id               TEXT PRIMARY KEY,
+    team                  TEXT,
+    opponent              TEXT,
+    points_diff           REAL,
+    elo_diff              REAL,
+    home                  INTEGER,
+    win                   INTEGER,
+    team_points_roll      REAL,
+    opponent_points_roll  REAL,
+    team_reb_roll         REAL,
+    opponent_reb_roll     REAL,
+    team_ast_roll         REAL,
+    opponent_ast_roll     REAL
+);
+```
+
+### Columns
+
+<ResponseField name="game_id" type="TEXT">
+  NBA game identifier. Primary key.
+</ResponseField>
+
+<ResponseField name="team" type="TEXT">
+  Team abbreviation.
+</ResponseField>
+
+<ResponseField name="opponent" type="TEXT">
+  Opponent team abbreviation.
+</ResponseField>
+
+<ResponseField name="points_diff" type="REAL">
+  `team_points_roll - opponent_points_roll`. Positive values indicate the team is outscoring opponents on average.
+</ResponseField>
+
+<ResponseField name="elo_diff" type="REAL">
+  Elo rating difference between the two teams. Currently always `0` — reserved for future use.
+</ResponseField>
+
+<ResponseField name="home" type="INTEGER">
+  `1` if the team played at home; `0` if away.
+</ResponseField>
+
+<ResponseField name="win" type="INTEGER">
+  `1` if the team won; `0` if the team lost. Target variable for the classifier.
+</ResponseField>
+
+<ResponseField name="team_points_roll" type="REAL">
+  Rolling average of points scored by the team over the last N games (default N=5).
+</ResponseField>
+
+<ResponseField name="opponent_points_roll" type="REAL">
+  Rolling average of points scored by the opponent over the last N games (default N=5).
+</ResponseField>
+
+<ResponseField name="team_reb_roll" type="REAL">
+  Rolling average of rebounds for the team over the last N games.
+</ResponseField>
+
+<ResponseField name="opponent_reb_roll" type="REAL">
+  Rolling average of rebounds for the opponent over the last N games.
+</ResponseField>
+
+<ResponseField name="team_ast_roll" type="REAL">
+  Rolling average of assists for the team over the last N games.
+</ResponseField>
+
+<ResponseField name="opponent_ast_roll" type="REAL">
+  Rolling average of assists for the opponent over the last N games.
+</ResponseField>
+
+<Note>
+  `elo_diff` is present in the schema but is always stored as `0`. It is excluded from the feature set used by the current ML model. See [`train_model_teamwins()`](/reference/prediction-ai#train_model_teamwins) for the exact feature columns used during training.
+</Note>

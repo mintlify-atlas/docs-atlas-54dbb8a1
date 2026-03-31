@@ -1,0 +1,138 @@
+---
+title: "Fetching Game Data"
+description: "Pull NBA regular season game logs from the NBA Stats API and store them in a local SQLite database."
+---
+
+The `fetch_games_teamwins` function retrieves team-level game logs for a given NBA season using `nba_api` and persists them to a local SQLite database (`nba_stats.db`). Each run is safe to repeat — rows are upserted, so existing records are overwritten rather than duplicated.
+
+## Function signature
+
+```python
+fetch_games_teamwins(season="2025-2026")
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `season` | `str` | `"2025-2026"` | NBA season string passed to `nba_api`. The source default uses `"YYYY-YYYY"` format (e.g. `"2025-2026"`), but `nba_api` also accepts abbreviated formats like `"2025-26"`. |
+
+## Usage
+
+```python
+from Data.fetch_games import fetch_games_teamwins
+
+# Fetch the current season (default: "2025-2026")
+fetch_games_teamwins()
+
+# Fetch a specific past season
+fetch_games_teamwins(season="2024-2025")
+```
+
+## Data source
+
+Game logs are fetched from the NBA Stats API via `nba_api.stats.endpoints.leaguegamelog`, requesting regular season data at the team level (`player_or_team_abbreviation="T"`).
+
+```python
+from nba_api.stats.endpoints import leaguegamelog
+
+df = leaguegamelog.LeagueGameLog(
+    season=season,
+    season_type_all_star="Regular Season",
+    player_or_team_abbreviation="T"
+).get_data_frames()[0]
+```
+
+## Self-join logic
+
+The raw game log contains one row per team per game. To attach opponent stats to each row, the function performs a self-join on `GAME_ID`:
+
+```python
+merged = df.merge(
+    df,
+    on="GAME_ID",
+    suffixes=("_team", "_opp")
+)
+
+# Remove rows where a team is matched against itself
+merged = merged[merged["TEAM_ID_team"] != merged["TEAM_ID_opp"]].copy()
+```
+
+This means **every game produces two rows** — one from each team's perspective. For a game between Team A and Team B:
+
+- Row 1: `team = A`, `opponent = B`, with A's stats as `team_*` and B's stats as `opponent_*`
+- Row 2: `team = B`, `opponent = A`, with B's stats as `team_*` and A's stats as `opponent_*`
+
+## The `home` field
+
+The `home` column is derived from the `MATCHUP` string returned by the API:
+
+```python
+merged["home"] = merged["MATCHUP_team"].apply(lambda x: 1 if "vs." in x else 0)
+```
+
+| Value | Meaning | Example matchup string |
+|-------|---------|------------------------|
+| `1` | Home game | `"BOS vs. MIA"` |
+| `0` | Away game | `"MIA @ BOS"` |
+
+## `games` table schema
+
+The function creates the `games` table if it does not already exist:
+
+```sql
+CREATE TABLE IF NOT EXISTS games (
+    game_id           TEXT,
+    game_date         TEXT,
+    team_id           INTEGER,
+    team              TEXT,
+    opponent          TEXT,
+    team_points       INTEGER,
+    opponent_points   INTEGER,
+    team_reb          INTEGER,
+    opponent_reb      INTEGER,
+    team_ast          INTEGER,
+    opponent_ast      INTEGER,
+    home              INTEGER,
+    win               INTEGER,
+    PRIMARY KEY (game_id, team_id)
+)
+```
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `game_id` | `TEXT` | Unique NBA game identifier. |
+| `game_date` | `TEXT` | Date of the game. |
+| `team_id` | `INTEGER` | NBA team ID for the team row. |
+| `team` | `TEXT` | Team abbreviation, e.g. `"BOS"`. |
+| `opponent` | `TEXT` | Opponent abbreviation, e.g. `"MIA"`. |
+| `team_points` | `INTEGER` | Points scored by the team. |
+| `opponent_points` | `INTEGER` | Points scored by the opponent. |
+| `team_reb` | `INTEGER` | Rebounds by the team. |
+| `opponent_reb` | `INTEGER` | Rebounds by the opponent. |
+| `team_ast` | `INTEGER` | Assists by the team. |
+| `opponent_ast` | `INTEGER` | Assists by the opponent. |
+| `home` | `INTEGER` | `1` if the team played at home, `0` if away. |
+| `win` | `INTEGER` | `1` if the team won, `0` if they lost. |
+
+The primary key is `(game_id, team_id)`, which uniquely identifies each team's perspective on a game.
+
+## Idempotent writes
+
+Rows are written with `INSERT OR REPLACE`, so running the function multiple times for the same season will overwrite existing records rather than create duplicates:
+
+```python
+cursor.execute("""
+INSERT OR REPLACE INTO games (
+    game_id, game_date, team_id, team, opponent,
+    team_points, opponent_points,
+    team_reb, opponent_reb,
+    team_ast, opponent_ast,
+    home, win
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+""", (...))
+```
+
+<Note>
+  The database file `nba_stats.db` is created in the same directory as `fetch_games.py`. Make sure the `Data/` directory is writable before running the function.
+</Note>

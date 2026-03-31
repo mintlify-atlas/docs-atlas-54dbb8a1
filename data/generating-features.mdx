@@ -1,0 +1,124 @@
+---
+title: "Generating Features"
+description: "Compute rolling-window team statistics from raw game data and write them to a feature table for model training."
+---
+
+The `generate_features_teamwins` function reads the `games` table populated by [`fetch_games_teamwins`](/data/fetching-games), computes per-team rolling averages over a configurable window, and writes the results to a `team_game_stats` table.
+
+## Function signature
+
+```python
+generate_features_teamwins(rolling_window: int = 5)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `rolling_window` | `int` | `5` | Number of most recent games to average over when computing rolling statistics. |
+
+## Usage
+
+```python
+from Data.generate_features import generate_features_teamwins
+
+# Use the default 5-game rolling window
+generate_features_teamwins()
+
+# Use a shorter window for more sensitivity to recent form
+generate_features_teamwins(rolling_window=3)
+
+# Use a longer window to smooth out variance
+generate_features_teamwins(rolling_window=10)
+```
+
+<Tip>
+  A larger rolling window smooths out game-to-game variance and captures longer-term team quality. A smaller window makes features more sensitive to recent form. Start with the default of `5` and adjust based on model validation performance.
+</Tip>
+
+## Rolling features
+
+For each of the following raw stats, a rolling mean is computed per team using the last `rolling_window` games (with `min_periods=1` so early-season rows are still included):
+
+```python
+for stat in ['team_points', 'opponent_points', 'team_reb', 'opponent_reb', 'team_ast', 'opponent_ast']:
+    df[f'{stat}_roll'] = (
+        df.groupby('team')[stat]
+        .rolling(rolling_window, min_periods=1)
+        .mean()
+        .reset_index(0, drop=True)
+    )
+```
+
+| Feature column | Description |
+|----------------|-------------|
+| `team_points_roll` | Rolling average of points scored by the team. |
+| `opponent_points_roll` | Rolling average of points scored by the opponent. |
+| `team_reb_roll` | Rolling average of team rebounds. |
+| `opponent_reb_roll` | Rolling average of opponent rebounds. |
+| `team_ast_roll` | Rolling average of team assists. |
+| `opponent_ast_roll` | Rolling average of opponent assists. |
+
+## Derived feature: `points_diff`
+
+After computing rolling averages, `points_diff` is derived as:
+
+```python
+df['points_diff'] = df['team_points_roll'] - df['opponent_points_roll']
+```
+
+A positive value means the team has been outscoring opponents on average over the rolling window. This is used as a summary offensive-margin feature for the model.
+
+## `team_game_stats` table schema
+
+The output table is fully replaced on each run (`if_exists='replace'`):
+
+```sql
+CREATE TABLE IF NOT EXISTS team_game_stats (
+    game_id               TEXT PRIMARY KEY,
+    team                  TEXT,
+    opponent              TEXT,
+    points_diff           REAL,
+    elo_diff              REAL,
+    home                  INTEGER,
+    win                   INTEGER,
+    team_points_roll      REAL,
+    opponent_points_roll  REAL,
+    team_reb_roll         REAL,
+    opponent_reb_roll     REAL,
+    team_ast_roll         REAL,
+    opponent_ast_roll     REAL
+)
+```
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `game_id` | `TEXT` | NBA game identifier (primary key). |
+| `team` | `TEXT` | Team abbreviation. |
+| `opponent` | `TEXT` | Opponent abbreviation. |
+| `points_diff` | `REAL` | `team_points_roll` minus `opponent_points_roll`. |
+| `elo_diff` | `REAL` | Elo rating difference (currently `0`, reserved for future use). |
+| `home` | `INTEGER` | `1` if the team played at home, `0` if away. |
+| `win` | `INTEGER` | `1` if the team won, `0` if they lost. |
+| `team_points_roll` | `REAL` | Rolling average points scored by the team. |
+| `opponent_points_roll` | `REAL` | Rolling average points scored by the opponent. |
+| `team_reb_roll` | `REAL` | Rolling average team rebounds. |
+| `opponent_reb_roll` | `REAL` | Rolling average opponent rebounds. |
+| `team_ast_roll` | `REAL` | Rolling average team assists. |
+| `opponent_ast_roll` | `REAL` | Rolling average opponent assists. |
+
+<Info>
+  The `team_game_stats` table is fully replaced every time `generate_features_teamwins` runs. You do not need to manually clear it before re-running.
+</Info>
+
+## Pipeline order
+
+`generate_features_teamwins` reads directly from the `games` table. Run [`fetch_games_teamwins`](/data/fetching-games) first to ensure the source data is up to date:
+
+```python
+from Data.fetch_games import fetch_games_teamwins
+from Data.generate_features import generate_features_teamwins
+
+fetch_games_teamwins(season="2025-26")
+generate_features_teamwins(rolling_window=5)
+```

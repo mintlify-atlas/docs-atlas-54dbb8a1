@@ -1,0 +1,217 @@
+---
+title: "betting_math"
+description: "Odds format conversion utilities"
+---
+
+## Module path
+
+```
+Betting and Parlay Engine.betting_math
+```
+
+<Note>
+  The source directory is named `Betting and Parlay Engine` (with spaces). When importing directly after adding the directory to `sys.path`, use:
+
+  ```python
+  from betting_math import OddsConverter
+  ```
+</Note>
+
+---
+
+## `OddsConverter`
+
+A stateless utility class. All methods are `@staticmethod` — no instantiation required.
+
+```python
+from betting_math import OddsConverter
+```
+
+---
+
+## `OddsConverter.american_to_decimal()`
+
+Converts American (moneyline) odds to decimal odds.
+
+### Signature
+
+```python
+@staticmethod
+def american_to_decimal(american: int) -> float:
+```
+
+### Parameters
+
+<ParamField path="american" type="integer" required>
+  American odds value. Positive values represent the profit on a $100 stake (e.g., `+150`). Negative values represent the stake required to win $100 (e.g., `-110`). Must not be `0`.
+</ParamField>
+
+**Returns:** `float` — decimal odds equivalent.
+
+**Raises:** `ValueError` if `american == 0`.
+
+### Formula
+
+- Positive: `(american / 100) + 1`
+- Negative: `(100 / abs(american)) + 1`
+
+### Example
+
+```python
+OddsConverter.american_to_decimal(150)   # → 2.5
+OddsConverter.american_to_decimal(-110)  # → 1.909090...
+```
+
+### Source
+
+```python betting_math.py
+@staticmethod
+def american_to_decimal(american):
+    if american == 0:
+        raise ValueError("American odds cannot be zero.")
+    if american > 0:
+        return (american / 100) + 1
+    else:
+        return (100 / abs(american)) + 1
+```
+
+---
+
+## `OddsConverter.american_to_probability()`
+
+Converts American odds to an implied win probability.
+
+### Signature
+
+```python
+@staticmethod
+def american_to_probability(american: int) -> float:
+```
+
+### Parameters
+
+<ParamField path="american" type="integer" required>
+  American odds value. Must not be `0`.
+</ParamField>
+
+**Returns:** `float` — implied probability in the range `(0.0, 1.0)`.
+
+**Raises:** `ValueError` if `american == 0`.
+
+### Formula
+
+- Positive: `100 / (american + 100)`
+- Negative: `abs(american) / (abs(american) + 100)`
+
+### Example
+
+```python
+OddsConverter.american_to_probability(150)   # → 0.4 (40%)
+OddsConverter.american_to_probability(-110)  # → 0.5238... (52.38%)
+```
+
+### Source
+
+```python betting_math.py
+@staticmethod
+def american_to_probability(american):
+    if american == 0:
+        raise ValueError("American odds cannot be zero.")
+    if american > 0:
+        return 100 / (american + 100)
+    else:
+        return abs(american) / (abs(american) + 100)
+```
+
+---
+
+## `OddsConverter.decimal_to_american()`
+
+Converts decimal odds to American (moneyline) odds.
+
+### Signature
+
+```python
+@staticmethod
+def decimal_to_american(decimal: float) -> float:
+```
+
+### Parameters
+
+<ParamField path="decimal" type="float" required>
+  Decimal odds value. Must be greater than `1`.
+</ParamField>
+
+**Returns:** `float` — American odds equivalent. Positive for underdogs (`decimal >= 2.0`), negative for favourites (`decimal < 2.0`).
+
+**Raises:** `ValueError` if `decimal <= 1`.
+
+### Formula
+
+- `decimal >= 2.0`: `(decimal - 1) * 100`
+- `decimal < 2.0`: `-100 / (decimal - 1)`
+
+### Example
+
+```python
+OddsConverter.decimal_to_american(2.5)   # → 150.0
+OddsConverter.decimal_to_american(1.909) # → -110.01...
+```
+
+### Source
+
+```python betting_math.py
+@staticmethod
+def decimal_to_american(decimal):
+    if decimal <= 1:
+        raise ValueError("Decimal odds must be greater than or equal to 1.")
+    if decimal >= 2.0:
+        return  (decimal - 1) * 100
+    else:
+        return -100 /(decimal - 1)
+```
+
+---
+
+## `OddsConverter.decimal_to_probability()`
+
+Converts decimal odds to an implied win probability.
+
+### Signature
+
+```python
+@staticmethod
+def decimal_to_probability(decimal: float) -> float:
+```
+
+### Parameters
+
+<ParamField path="decimal" type="float" required>
+  Decimal odds value. Must be greater than `1`.
+</ParamField>
+
+**Returns:** `float` — implied probability in the range `(0.0, 1.0)`.
+
+**Raises:** `ValueError` if `decimal <= 1`.
+
+### Formula
+
+`1 / decimal`
+
+### Example
+
+```python
+OddsConverter.decimal_to_probability(2.5)  # → 0.4 (40%)
+OddsConverter.decimal_to_probability(1.5)  # → 0.6667 (66.67%)
+```
+
+### Source
+
+```python betting_math.py
+@staticmethod
+def decimal_to_probability(decimal):
+    if decimal <= 1:
+        raise ValueError("Decimal odds must be greater than or equal to 1.")
+    
+    return 1 / decimal
+```

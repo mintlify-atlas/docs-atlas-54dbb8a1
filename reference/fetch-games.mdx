@@ -1,0 +1,79 @@
+---
+title: "fetch_games"
+description: "NBA game data ingestion"
+---
+
+## Module path
+
+```
+Data.fetch_games
+```
+
+---
+
+## `fetch_games_teamwins()`
+
+Fetches Regular Season team-level game logs from the NBA API and stores them in the local SQLite database. Each game produces two rows — one for each team.
+
+### Signature
+
+```python
+def fetch_games_teamwins(season="2025-2026"):
+```
+
+### Parameters
+
+<ParamField path="season" type="string" default="2025-2026">
+  NBA season string passed to `nba_api`. The source default is `"2025-2026"` (full-year format). The abbreviated form (e.g., `"2025-26"`) is also accepted by `nba_api`.
+</ParamField>
+
+**Returns:** `None`
+
+**Side effects:**
+- Creates the `games` table in `Data/nba_stats.db` if it does not already exist.
+- Inserts or replaces rows for every team-game in the specified season.
+- Prints progress and a row count to stdout.
+
+<Info>
+  Data source: [`nba_api.stats.endpoints.leaguegamelog`](https://github.com/swar/nba_api), Regular Season, team (`"T"`) level.
+</Info>
+
+### Usage example
+
+```python
+from Data.fetch_games import fetch_games_teamwins
+
+# Fetch the current season (default)
+fetch_games_teamwins()
+
+# Fetch a specific past season
+fetch_games_teamwins(season="2024-2025")
+```
+
+---
+
+## `games` table columns
+
+The function creates or updates the `games` table with the following columns:
+
+| Column             | Type      | Description                                              |
+| ------------------ | --------- | -------------------------------------------------------- |
+| `game_id`          | `TEXT`    | Unique NBA game identifier. Part of primary key.        |
+| `game_date`        | `TEXT`    | Date of the game as returned by the NBA API.            |
+| `team_id`          | `INTEGER` | NBA team identifier. Part of primary key.               |
+| `team`             | `TEXT`    | Team abbreviation (e.g., `"LAL"`).                      |
+| `opponent`         | `TEXT`    | Opponent team abbreviation (e.g., `"BOS"`).             |
+| `team_points`      | `INTEGER` | Points scored by the team.                              |
+| `opponent_points`  | `INTEGER` | Points scored by the opponent.                          |
+| `team_reb`         | `INTEGER` | Total rebounds for the team.                            |
+| `opponent_reb`     | `INTEGER` | Total rebounds for the opponent.                        |
+| `team_ast`         | `INTEGER` | Total assists for the team.                             |
+| `opponent_ast`     | `INTEGER` | Total assists for the opponent.                         |
+| `home`             | `INTEGER` | `1` if the team played at home, `0` if away.            |
+| `win`              | `INTEGER` | `1` if the team won, `0` if the team lost.              |
+
+**Primary key:** `(game_id, team_id)`
+
+<Note>
+  The home indicator is derived from the `MATCHUP` field: `"vs."` in the matchup string means home; `"@"` means away.
+</Note>

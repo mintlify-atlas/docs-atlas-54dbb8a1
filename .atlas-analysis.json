@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Sports Predictor",
+  "projectType": "ai-ml",
+  "projectName": "Sports Predictor",
+  "projectDescription": "An NBA game outcome predictor that trains a Random Forest classifier on historical team stats to estimate win probabilities and evaluate betting edges.",
   "theme": "palm",
-  "colors": {
-    "primary": "#16A34A",
-    "light": "#DCFCE7",
-    "dark": "#14532D"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/Chase125342/sportspredictor"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/Chase125342/sportspredictor"
-    }
-  },
+  "primaryColor": "#16A34A",
+  "lightColor": "#DCFCE7",
+  "darkColor": "#14532D",
   "navigation": {
     "tabs": [
       {
@@ -75,5 +63,23 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "NBA game data ingestion via nba_api with SQLite storage",
+    "Rolling-window feature engineering (points, rebounds, assists)",
+    "Random Forest classifier for win probability prediction",
+    "Bet evaluation with Good Bet / Slight Edge / Avoid ratings",
+    "Odds conversion utilities (American, Decimal, Implied Probability)"
+  ],
+  "publicApiSurface": [
+    "train_model_teamwins()",
+    "predict_game_teamwins(points_diff, team_reb_roll, opponent_reb_roll, team_ast_roll, opponent_ast_roll, home)",
+    "evaluate_bet_teamwins(probability)",
+    "fetch_games_teamwins(season)",
+    "generate_features_teamwins(rolling_window)",
+    "OddsConverter.american_to_decimal(american)",
+    "OddsConverter.american_to_probability(american)",
+    "OddsConverter.decimal_to_american(decimal)",
+    "OddsConverter.decimal_to_probability(decimal)"
+  ]
 }

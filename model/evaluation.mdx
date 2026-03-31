@@ -1,0 +1,106 @@
+---
+title: "Model evaluation"
+description: "Understand model accuracy and use the three-tier bet evaluation system to interpret win probabilities."
+---
+
+Sports Predictor includes two evaluation mechanisms: a test accuracy score printed during training, and `evaluate_bet_teamwins()` which translates a win probability into an actionable bet recommendation.
+
+## Test accuracy
+
+After fitting the model, `train_model_teamwins()` prints accuracy on the held-out 30 % test split:
+
+```python
+preds = model.predict(X_test)
+print("Test Accuracy:", metrics.accuracy_score(y_test, preds))
+# Example output: Test Accuracy: 0.XXX
+```
+
+This gives a quick measure of how often the model correctly predicts wins and losses on unseen games.
+
+## Bet evaluation
+
+`evaluate_bet_teamwins(probability)` takes the float returned by `predict_game_teamwins()` and returns one of three string labels:
+
+```python
+def evaluate_bet_teamwins(probability):
+    if probability > 0.60:
+        return "Good Bet"
+    elif probability > 0.52:
+        return "Slight Edge"
+    return "Avoid"
+```
+
+### Probability thresholds
+
+| Condition | Label | Meaning |
+|---|---|---|
+| `probability > 0.60` | `"Good Bet"` | Strong model confidence — the edge over 50 % is meaningful |
+| `probability > 0.52` | `"Slight Edge"` | Marginal advantage — proceed with caution |
+| `probability <= 0.52` | `"Avoid"` | Not enough edge to justify a wager |
+
+## Test scenarios
+
+The following cases reflect the test inputs defined in `test_betting.py`. Note that the test file references older function names (`predict_game`, `evaluate_bet`) that have since been renamed to `predict_game_teamwins` and `evaluate_bet_teamwins`. Use the current function names as shown below:
+
+<Tabs>
+  <Tab title="Strong Home Favorite">
+    ```python
+    prob = predict_game_teamwins(
+        points_diff=10,
+        team_reb_roll=5,
+        opponent_reb_roll=3,
+        team_ast_roll=4,
+        opponent_ast_roll=2,
+        home=1
+    )
+    # Expected: probability well above 0.60 → "Good Bet"
+    print(evaluate_bet_teamwins(prob))
+    ```
+  </Tab>
+  <Tab title="Slight Underdog">
+    ```python
+    prob = predict_game_teamwins(
+        points_diff=-2,
+        team_reb_roll=4,
+        opponent_reb_roll=5,
+        team_ast_roll=3,
+        opponent_ast_roll=4,
+        home=0
+    )
+    # Expected: probability near or below 0.52 → "Slight Edge" or "Avoid"
+    print(evaluate_bet_teamwins(prob))
+    ```
+  </Tab>
+  <Tab title="Even Match">
+    ```python
+    prob = predict_game_teamwins(
+        points_diff=0,
+        team_reb_roll=3,
+        opponent_reb_roll=3,
+        team_ast_roll=3,
+        opponent_ast_roll=3,
+        home=1
+    )
+    # Expected: probability near 0.50 → "Avoid"
+    print(evaluate_bet_teamwins(prob))
+    ```
+  </Tab>
+  <Tab title="Bad Bet Example">
+    ```python
+    prob = predict_game_teamwins(
+        points_diff=-8,
+        team_reb_roll=2,
+        opponent_reb_roll=5,
+        team_ast_roll=1,
+        opponent_ast_roll=4,
+        home=0
+    )
+    # Expected: low probability → "Avoid"
+    print(evaluate_bet_teamwins(prob))
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Use rolling stats from the most recent five games when building your inputs. Fresher averages reflect current form and produce more accurate probability estimates than season-long averages.
+</Tip>

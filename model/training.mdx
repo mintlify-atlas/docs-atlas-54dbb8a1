@@ -1,0 +1,104 @@
+---
+title: "Training the model"
+description: "Train a Random Forest classifier on engineered NBA team statistics to predict game outcomes."
+---
+
+`train_model_teamwins()` reads the `team_game_stats` table, fits a `RandomForestClassifier`, prints test accuracy, and saves the model to disk. You must run this before making any predictions.
+
+<Note>
+  The `team_game_stats` table must exist before training. Run `generate_features_teamwins()` first to populate it.
+</Note>
+
+## How to train
+
+<Steps>
+  <Step title="Ensure the feature table is ready">
+    Run the data pipeline to fetch games and generate rolling-window features:
+
+    ```python
+    from Data.fetch_games import fetch_games_teamwins
+    from Data.generate_features import generate_features_teamwins
+
+    fetch_games_teamwins("2025-26")
+    generate_features_teamwins()
+    ```
+  </Step>
+  <Step title="Call train_model_teamwins()">
+    Import and call the training function:
+
+    ```python
+    from prediction_ai import train_model_teamwins
+
+    train_model_teamwins()
+    # Test Accuracy: 0.XXX  (value depends on season data)
+    ```
+
+    The function prints test accuracy to stdout and writes the model file to `models/nba_model.pkl`.
+  </Step>
+</Steps>
+
+## Model architecture
+
+The classifier is a `RandomForestClassifier` from scikit-learn:
+
+```python
+model = RandomForestClassifier(n_estimators=200, random_state=0)
+```
+
+| Parameter | Value | Description |
+|---|---|---|
+| `n_estimators` | `200` | Number of decision trees in the ensemble |
+| `random_state` | `0` | Seed for reproducibility |
+
+## Train/test split
+
+The dataset is split before fitting:
+
+```python
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42
+)
+```
+
+| Parameter | Value | Description |
+|---|---|---|
+| `test_size` | `0.3` | 30 % of rows held out for evaluation |
+| `random_state` | `42` | Seed for reproducibility |
+
+## Input features
+
+The model uses six numeric columns from `team_game_stats`:
+
+| Feature | Type | Description |
+|---|---|---|
+| `points_diff` | float | Rolling average points differential (team minus opponent) |
+| `team_reb_roll` | float | Team's rolling average rebounds |
+| `opponent_reb_roll` | float | Opponent's rolling average rebounds |
+| `team_ast_roll` | float | Team's rolling average assists |
+| `opponent_ast_roll` | float | Opponent's rolling average assists |
+| `home` | int | `1` if the team is at home, `0` if away |
+
+## Target variable
+
+The target column is `win` — a binary integer (`1` = team won, `0` = team lost).
+
+```python
+X = df[['points_diff', 'team_reb_roll', 'opponent_reb_roll',
+        'team_ast_roll', 'opponent_ast_roll', 'home']]
+y = df['win']
+```
+
+## Model persistence
+
+After fitting, the model is serialized with `pickle` to `models/nba_model.pkl` relative to `prediction_ai.py`:
+
+```python
+os.makedirs(os.path.dirname(MODELPATH), exist_ok=True)
+pickle.dump(model, open(MODELPATH, "wb"))
+```
+
+The `models/` directory is created automatically if it does not exist.
+
+<Warning>
+  Calling `train_model_teamwins()` again overwrites the existing `models/nba_model.pkl` file. There is no automatic backup.
+</Warning>

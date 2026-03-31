@@ -1,80 +1,167 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Fetch NBA data, train a model, and get your first win probability prediction in minutes."
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+- Python 3.8 or later
+- `pip` package manager
 
-### Step 1: Set up your local environment
+## Installation
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Install the required dependencies:
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+```bash
+pip install nba_api pandas scikit-learn
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The model must be trained before you can make predictions. Complete all steps below in order — skipping `train_model_teamwins()` will cause `predict_game_teamwins()` to fail with a missing model file error.
 </Note>
+
+## Run the full pipeline
+
+<Steps>
+  <Step title="Fetch NBA game data">
+    Call `fetch_games_teamwins()` with a season string to pull team game logs from the NBA Stats API and store them in a local SQLite database (`Data/nba_stats.db`).
+
+    ```python
+    from Data.fetch_games import fetch_games_teamwins
+
+    fetch_games_teamwins("2025-26")
+    ```
+
+    The season format is `"YYYY-YY"` (e.g. `"2024-25"`, `"2025-26"`). Data is written to the `games` table and existing rows are replaced on conflict.
+  </Step>
+
+  <Step title="Generate features">
+    Call `generate_features_teamwins()` to compute 5-game rolling averages for points, rebounds, and assists for each team. The results are written to the `team_game_stats` table.
+
+    ```python
+    from Data.generate_features import generate_features_teamwins
+
+    generate_features_teamwins()
+    ```
+
+    The default rolling window is 5 games. Pass a different integer to `rolling_window` to change it:
+
+    ```python
+    generate_features_teamwins(rolling_window=10)
+    ```
+  </Step>
+
+  <Step title="Train the model">
+    Call `train_model_teamwins()` to fit a 200-estimator Random Forest classifier on the `team_game_stats` table. The trained model is saved to `models/nba_model.pkl`.
+
+    ```python
+    from prediction_ai import train_model_teamwins
+
+    train_model_teamwins()
+    ```
+
+    The function prints test accuracy on a held-out 30% split before saving:
+
+    ```
+    Test Accuracy: 0.XXX
+    ```
+
+    The exact value depends on the season data used for training.
+
+    <Tip>
+      Rerun this step any time you fetch a new season of data to retrain on the latest games.
+    </Tip>
+  </Step>
+
+  <Step title="Make a prediction">
+    Call `predict_game_teamwins()` with the rolling-average stats for both teams to get a win probability between `0.0` and `1.0`.
+
+    ```python
+    from prediction_ai import predict_game_teamwins
+
+    prob = predict_game_teamwins(
+        points_diff=0,        # float: team's rolling points avg minus opponent's
+        team_reb_roll=4,      # float: team's 5-game rolling rebound average
+        opponent_reb_roll=5,  # float: opponent's 5-game rolling rebound average
+        team_ast_roll=4,      # float: team's 5-game rolling assist average
+        opponent_ast_roll=5,  # float: opponent's 5-game rolling assist average
+        home=1                # int: 1 if the team is playing at home, 0 if away
+    )
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `points_diff` | `float` | Team's rolling points average minus the opponent's rolling points average |
+    | `team_reb_roll` | `float` | Team's rolling rebound average |
+    | `opponent_reb_roll` | `float` | Opponent's rolling rebound average |
+    | `team_ast_roll` | `float` | Team's rolling assist average |
+    | `opponent_ast_roll` | `float` | Opponent's rolling assist average |
+    | `home` | `int` | `1` if the team plays at home, `0` if away |
+  </Step>
+
+  <Step title="Evaluate the bet">
+    Pass the probability to `evaluate_bet_teamwins()` to get a plain-language recommendation.
+
+    ```python
+    from prediction_ai import evaluate_bet_teamwins
+
+    print("Win Probability:", round(prob, 3))
+    print("Evaluation:", evaluate_bet_teamwins(prob))
+    ```
+
+    | Probability | Result |
+    |---|---|
+    | > 0.60 | `"Good Bet"` |
+    | > 0.52 | `"Slight Edge"` |
+    | ≤ 0.52 | `"Avoid"` |
+  </Step>
+</Steps>
+
+## Complete example
+
+The following is the full end-to-end script from `main.py`:
+
+```python
+from Data.generate_features import generate_features_teamwins
+from Data.fetch_games import fetch_games_teamwins
+from prediction_ai import train_model_teamwins, predict_game_teamwins, evaluate_bet_teamwins
+
+print("Getting NBA game data...")
+fetch_games_teamwins("2025-26")
+
+print("Populating database...")
+generate_features_teamwins()
+
+print("Training model on data...")
+train_model_teamwins()
+
+print("Getting results...")
+prob = predict_game_teamwins(
+    points_diff=0,
+    team_reb_roll=4,
+    opponent_reb_roll=5,
+    team_ast_roll=4,
+    opponent_ast_roll=5,
+    home=1
+)
+print("Win Probability:", round(prob, 3))
+print("Evaluation:", evaluate_bet_teamwins(prob))
+```
+
+### Expected output
+
+```
+Getting NBA game data...
+Pulling NBA data for season 2025-26...
+Inserted/updated NNNN team-game rows.
+Populating database...
+Loaded NNNN rows from 'games' table.
+Generated NNNN rows in 'team_game_stats'.
+Training model on data...
+Test Accuracy: 0.XXX
+Getting results...
+Win Probability: 0.XXX
+Evaluation: Avoid
+```
+
+The final two lines show the win probability as a float rounded to three decimal places, followed by one of `"Good Bet"`, `"Slight Edge"`, or `"Avoid"`.

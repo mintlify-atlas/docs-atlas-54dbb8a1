@@ -1,0 +1,127 @@
+---
+title: "Predicting game outcomes"
+description: "Use the trained Random Forest model to predict win probability for any NBA matchup."
+---
+
+`predict_game_teamwins()` loads the saved model from `models/nba_model.pkl` and returns a win probability between `0` and `1` for a given set of rolling team statistics.
+
+<Note>
+  The model must be trained before calling this function. Run `train_model_teamwins()` first.
+</Note>
+
+## Function signature
+
+```python
+predict_game_teamwins(
+    points_diff,
+    team_reb_roll,
+    opponent_reb_roll,
+    team_ast_roll,
+    opponent_ast_roll,
+    home
+)
+```
+
+**Returns:** `float` — win probability between `0.0` and `1.0`.
+
+## Parameters
+
+<ParamField path="points_diff" type="float" required>
+  Rolling average points differential — the team's average points per game minus the opponent's, computed over the last several games.
+</ParamField>
+
+<ParamField path="team_reb_roll" type="float" required>
+  The team's rolling average rebounds per game.
+</ParamField>
+
+<ParamField path="opponent_reb_roll" type="float" required>
+  The opponent's rolling average rebounds per game.
+</ParamField>
+
+<ParamField path="team_ast_roll" type="float" required>
+  The team's rolling average assists per game.
+</ParamField>
+
+<ParamField path="opponent_ast_roll" type="float" required>
+  The opponent's rolling average assists per game.
+</ParamField>
+
+<ParamField path="home" type="int" required>
+  `1` if the team is playing at home, `0` if the team is playing away.
+</ParamField>
+
+## Usage examples
+
+The examples below are drawn from `main.py` and `test_betting.py`.
+
+### Even match (from main.py)
+
+A team with no points advantage, slightly weaker rebounding and assists, playing at home:
+
+```python
+from prediction_ai import predict_game_teamwins, evaluate_bet_teamwins
+
+prob = predict_game_teamwins(
+    points_diff=0,
+    team_reb_roll=4,
+    opponent_reb_roll=5,
+    team_ast_roll=4,
+    opponent_ast_roll=5,
+    home=1
+)
+print("Win Probability:", round(prob, 3))
+print("Evaluation:", evaluate_bet_teamwins(prob))
+```
+
+### Strong home favorite
+
+A team with a clear statistical edge and home court advantage:
+
+```python
+prob = predict_game_teamwins(
+    points_diff=10,
+    team_reb_roll=5,
+    opponent_reb_roll=3,
+    team_ast_roll=4,
+    opponent_ast_roll=2,
+    home=1
+)
+```
+
+### Slight underdog
+
+A team trailing in most metrics and playing away:
+
+```python
+prob = predict_game_teamwins(
+    points_diff=-2,
+    team_reb_roll=4,
+    opponent_reb_roll=5,
+    team_ast_roll=3,
+    opponent_ast_roll=4,
+    home=0
+)
+```
+
+## How it works
+
+Internally, the function constructs a single-row `DataFrame` from the six inputs, then calls `predict_proba` on the loaded model:
+
+```python
+def predict_game_teamwins(points_diff, team_reb_roll, opponent_reb_roll,
+                          team_ast_roll, opponent_ast_roll, home):
+    model = pickle.load(open(MODELPATH, "rb"))
+    features = pd.DataFrame([{
+        "points_diff": points_diff,
+        "team_reb_roll": team_reb_roll,
+        "opponent_reb_roll": opponent_reb_roll,
+        "team_ast_roll": team_ast_roll,
+        "opponent_ast_roll": opponent_ast_roll,
+        "home": home
+    }])
+
+    prob = model.predict_proba(features)[0][1]
+    return prob
+```
+
+`predict_proba(features)[0][1]` returns the probability assigned to class `1` (win).

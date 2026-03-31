@@ -1,0 +1,105 @@
+---
+title: "Evaluating bets"
+description: "Identify value in betting markets by comparing the model's predicted win probability against the sportsbook's implied probability."
+---
+
+Once you have a win probability from `predict_game_teamwins()`, you can pass it to `evaluate_bet_teamwins()` to get a simple recommendation. To find true value in a bet, compare the model's probability against the implied probability embedded in the sportsbook's odds.
+
+<Note>
+  This tool is for educational purposes only. It is not financial or gambling advice.
+</Note>
+
+## The three-tier evaluation system
+
+`evaluate_bet_teamwins(probability)` in `prediction_ai.py` classifies a predicted win probability into one of three tiers:
+
+| Return value | Condition | Meaning |
+|---|---|---|
+| `"Good Bet"` | `probability > 0.60` | Model is confident — strong edge over a typical line |
+| `"Slight Edge"` | `probability > 0.52` | Marginal advantage — worth considering only with favorable odds |
+| `"Avoid"` | `probability <= 0.52` | Insufficient edge to justify the risk |
+
+```python
+from prediction_ai import evaluate_bet_teamwins
+
+evaluate_bet_teamwins(0.65)  # → "Good Bet"
+evaluate_bet_teamwins(0.55)  # → "Slight Edge"
+evaluate_bet_teamwins(0.48)  # → "Avoid"
+```
+
+## Expected value in sports betting
+
+A bet has **positive expected value (EV)** when your estimated probability of winning is higher than the probability implied by the odds. In other words: the bookmaker is underpricing the outcome relative to what your model predicts.
+
+**Example:** Your model predicts a 65% chance of winning. The sportsbook offers `+120` on that outcome.
+
+```python
+from betting_math import OddsConverter
+
+model_probability = 0.65
+american_odds = 120
+
+implied_probability = OddsConverter.american_to_probability(american_odds)
+print(f"Model probability:   {model_probability:.1%}")    # 65.0%
+print(f"Implied probability: {implied_probability:.1%}")  # 45.5%
+```
+
+The model says 65% — the book implies only ~45.5%. That gap is where the edge lives.
+
+## Full workflow
+
+The recommended pattern is: predict → evaluate → verify against odds.
+
+```python
+from prediction_ai import predict_game_teamwins, evaluate_bet_teamwins
+from betting_math import OddsConverter
+
+# Step 1: Get a win probability from the model
+prob = predict_game_teamwins(
+    points_diff=4.2,
+    team_reb_roll=44.1,
+    opponent_reb_roll=41.8,
+    team_ast_roll=25.3,
+    opponent_ast_roll=23.0,
+    home=1
+)
+print(f"Predicted win probability: {prob:.1%}")
+
+# Step 2: Get a tier recommendation
+recommendation = evaluate_bet_teamwins(prob)
+print(f"Bet evaluation: {recommendation}")
+
+# Step 3: Compare against the sportsbook's implied probability
+american_odds = 120  # The line offered by the sportsbook
+implied_prob = OddsConverter.american_to_probability(american_odds)
+print(f"Sportsbook implied probability: {implied_prob:.1%}")
+
+# Step 4: Decide
+if prob > implied_prob:
+    print("Model has an edge over the market.")
+else:
+    print("No edge detected — the market has priced this outcome correctly or better.")
+```
+
+**Example output:**
+
+```
+Predicted win probability: 65.0%
+Bet evaluation: Good Bet
+Sportsbook implied probability: 45.5%
+Model has an edge over the market.
+```
+
+<Tip>
+  Always convert the sportsbook's American odds to implied probability with `OddsConverter.american_to_probability()` and compare it directly against the model's output. A `"Good Bet"` rating alone does not guarantee value — the odds on offer matter just as much as the predicted probability.
+</Tip>
+
+## Reference
+
+| Function | Module | Description |
+|---|---|---|
+| `predict_game_teamwins(...)` | `prediction_ai.py` | Returns a float win probability (0–1) |
+| `evaluate_bet_teamwins(probability)` | `prediction_ai.py` | Returns `"Good Bet"`, `"Slight Edge"`, or `"Avoid"` |
+| `OddsConverter.american_to_probability(american)` | `betting_math.py` | Converts a moneyline to implied probability |
+
+See [Odds Converter](/betting/odds-converter) for the full `OddsConverter` API.

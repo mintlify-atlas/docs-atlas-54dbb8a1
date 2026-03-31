@@ -1,0 +1,146 @@
+---
+title: "Odds Converter"
+description: "Convert between American (moneyline), decimal, and implied probability odds formats using the OddsConverter utility class."
+---
+
+Sports Predictor includes `OddsConverter`, a static utility class in `betting_math.py` that converts between the three most common betting odds formats. No instantiation is needed — call each method directly on the class.
+
+<Note>
+  `betting_math.py` lives inside the `Betting and Parlay Engine/` directory (directory name contains spaces). To import it, add the directory to your Python path first:
+
+  ```python
+  import sys
+  sys.path.append("Betting and Parlay Engine")
+  from betting_math import OddsConverter
+  ```
+</Note>
+
+## Odds formats
+
+| Format | Example | Description |
+|---|---|---|
+| **American (moneyline)** | `+150`, `-200` | Positive = underdog (profit per $100 wagered); negative = favorite (amount to wager to profit $100) |
+| **Decimal** | `2.5`, `1.5` | Total return per $1 wagered, including stake |
+| **Implied probability** | `0.4`, `0.667` | The bookmaker's assessed likelihood of an outcome, expressed as a value between 0 and 1 |
+
+## Methods
+
+<Tabs>
+  <Tab title="american_to_decimal">
+    Convert American (moneyline) odds to decimal odds.
+
+    <ParamField path="american" type="int" required>
+      American odds value. Positive for underdogs (e.g. `+150`), negative for favorites (e.g. `-200`). Cannot be `0`.
+    </ParamField>
+
+    **Returns:** `float` — decimal odds
+
+    **Formula:**
+    - If `american > 0`: `(american / 100) + 1`
+    - If `american < 0`: `(100 / abs(american)) + 1`
+
+    **Raises:** `ValueError` if `american == 0`
+
+    ```python
+    from betting_math import OddsConverter
+
+    OddsConverter.american_to_decimal(150)   # → 2.5
+    OddsConverter.american_to_decimal(-200)  # → 1.5
+    ```
+  </Tab>
+
+  <Tab title="american_to_probability">
+    Convert American odds to implied probability.
+
+    <ParamField path="american" type="int" required>
+      American odds value. Positive for underdogs, negative for favorites. Cannot be `0`.
+    </ParamField>
+
+    **Returns:** `float` between `0` and `1`
+
+    **Formula:**
+    - If `american > 0`: `100 / (american + 100)`
+    - If `american < 0`: `abs(american) / (abs(american) + 100)`
+
+    **Raises:** `ValueError` if `american == 0`
+
+    ```python
+    from betting_math import OddsConverter
+
+    OddsConverter.american_to_probability(150)   # → 0.4
+    OddsConverter.american_to_probability(-200)  # → 0.6667
+    ```
+  </Tab>
+
+  <Tab title="decimal_to_american">
+    Convert decimal odds back to American odds.
+
+    <ParamField path="decimal" type="float" required>
+      Decimal odds. Must be greater than `1`.
+    </ParamField>
+
+    **Returns:** `float` — American odds
+
+    **Formula:**
+    - If `decimal >= 2.0`: `(decimal - 1) * 100`
+    - If `decimal < 2.0`: `-100 / (decimal - 1)`
+
+    **Raises:** `ValueError` if `decimal <= 1`
+
+    ```python
+    from betting_math import OddsConverter
+
+    OddsConverter.decimal_to_american(2.5)  # → 150.0
+    OddsConverter.decimal_to_american(1.5)  # → -200.0
+    ```
+  </Tab>
+
+  <Tab title="decimal_to_probability">
+    Convert decimal odds to implied probability.
+
+    <ParamField path="decimal" type="float" required>
+      Decimal odds. Must be greater than `1`.
+    </ParamField>
+
+    **Returns:** `float` between `0` and `1` — equal to `1 / decimal`
+
+    **Raises:** `ValueError` if `decimal <= 1`
+
+    ```python
+    from betting_math import OddsConverter
+
+    OddsConverter.decimal_to_probability(2.5)  # → 0.4
+    OddsConverter.decimal_to_probability(1.5)  # → 0.6667
+    ```
+  </Tab>
+</Tabs>
+
+## Complete example
+
+```python
+from betting_math import OddsConverter
+
+american_odds = -200
+
+# Convert to all formats
+decimal = OddsConverter.american_to_decimal(american_odds)
+probability = OddsConverter.american_to_probability(american_odds)
+
+print(f"American:    {american_odds}")
+print(f"Decimal:     {decimal}")        # 1.5
+print(f"Probability: {probability:.3f}") # 0.667
+
+# Convert back from decimal
+back_to_american = OddsConverter.decimal_to_american(decimal)
+print(f"Back to American: {back_to_american}")  # -200.0
+```
+
+## What implied probability means
+
+Implied probability is the likelihood of an outcome as priced into the odds by a sportsbook. A line of `-200` implies the bookmaker believes the favorite wins roughly **66.7%** of the time.
+
+<Note>
+  Sportsbooks build a margin (the "vig" or "juice") into their lines, so the sum of implied probabilities across all outcomes in a market typically exceeds 1.0. When comparing model probabilities against bookmaker odds, keep this overround in mind.
+</Note>
+
+When your model's predicted probability exceeds the implied probability from the odds, the bet may represent positive expected value. See [Evaluating Bets](/betting/bet-evaluation) for how to act on this.

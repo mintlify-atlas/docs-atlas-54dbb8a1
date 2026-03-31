@@ -1,0 +1,50 @@
+---
+title: "Sports Predictor"
+description: "An NBA game outcome predictor that uses machine learning to estimate win probabilities and evaluate betting edges."
+---
+
+Sports Predictor is a Python-based machine learning tool that fetches real NBA game data, engineers rolling-window features, and trains a Random Forest classifier to predict game outcomes. It also includes a betting engine that converts odds formats and evaluates whether a predicted probability represents a worthwhile wager.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running — fetch data, train the model, and make your first prediction in minutes.
+  </Card>
+  <Card title="Data Pipeline" icon="database" href="/data/fetching-games">
+    Learn how game data is fetched from the NBA API and stored in SQLite.
+  </Card>
+  <Card title="Model" icon="brain" href="/model/training">
+    Understand how the Random Forest classifier is trained, tuned, and used for inference.
+  </Card>
+  <Card title="Betting Engine" icon="coins" href="/betting/odds-converter">
+    Convert between odds formats and evaluate whether a win probability is worth betting.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Fetch game data">
+    Pull NBA regular season game logs for a given season using `fetch_games_teamwins()`. Data is stored in a local SQLite database.
+  </Step>
+  <Step title="Generate features">
+    Run `generate_features_teamwins()` to compute rolling averages for points, rebounds, and assists, and persist them to the `team_game_stats` table.
+  </Step>
+  <Step title="Train the model">
+    Call `train_model_teamwins()` to fit a Random Forest classifier on the feature table. The trained model is saved to `models/nba_model.pkl`.
+  </Step>
+  <Step title="Predict and evaluate">
+    Use `predict_game_teamwins()` to get a win probability for any matchup, then pass it to `evaluate_bet_teamwins()` to get a bet recommendation.
+  </Step>
+</Steps>
+
+## Key features
+
+- **NBA data ingestion** — Pulls team game logs directly from the NBA Stats API via `nba_api`
+- **Rolling-window features** — Computes 5-game rolling averages for points, rebounds, and assists for both teams
+- **Random Forest classifier** — 200-estimator ensemble model trained with an 70/30 train/test split
+- **Bet evaluation** — Three-tier rating system: `Good Bet`, `Slight Edge`, or `Avoid`
+- **Odds conversion** — Convert between American odds, decimal odds, and implied probabilities
+
+<Note>
+  Sports Predictor currently supports NBA regular season data. College basketball (CBB) model files are present but the pipeline defaults to NBA.
+</Note>
